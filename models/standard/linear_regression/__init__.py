@@ -2,7 +2,8 @@
 This module contains a linear regression model.
 """
 
-import numpy as np
+# import numpy as np
+
 
 class LinearRegression():
     def __init__(self, data=None):

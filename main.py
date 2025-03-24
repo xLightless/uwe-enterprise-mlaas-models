@@ -17,7 +17,7 @@ import time
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from models.config import RANDOM_STATE
+from models.config import RANDOM_STATE, TARGET_VARIABLE_COL_NUM
 from models.standard.linear_regression import LinearRegression
 from models.standard.knn import KNN
 
@@ -31,6 +31,7 @@ datasets_directory = current_directory + "datasets\\"
 # Files and Datasets
 requirements = current_directory + "requirements.txt"
 insurance_dataset = datasets_directory + "insurance.csv"
+
 
 def install(requirements):
     """
@@ -79,7 +80,6 @@ def train_model(
             print("[ERROR] Model %s not found." % model_name)
             exit()
 
-
     # Fit the model to the training data
     model.fit(X_train, y_train)
     return model
@@ -95,9 +95,15 @@ def evaluate_model(model_name, model, X_test, y_test, verbose):
 
     if verbose:
         print("[INFO] Predictions:", predictions)
-        print("[INFO] Mean Absolute Error:", mean_absolute_error(y_test, predictions))
-        print("[INFO] Mean Squared Error:", mean_squared_error(y_test, predictions))
-        print("[INFO] R2 Score:", r2_score(y_test, predictions))
+        print("[INFO] Mean Absolute Error:", mean_absolute_error(
+            y_test, predictions
+        ))
+        print("[INFO] Mean Squared Error:", mean_squared_error(
+            y_test, predictions
+        ))
+        print("[INFO] R2 Score:", r2_score(
+            y_test, predictions
+        ))
 
     return predictions
 
@@ -213,7 +219,8 @@ def main():
         print(
             "[INFO] Dataset loaded. Took %f seconds." % (
                 end_time - start_time
-        ))
+            )
+        )
 
         y = data.iloc[:, TARGET_VARIABLE_COL_NUM].values  # Target variable
         X = data.iloc[:, 1:].values  # Features
@@ -253,9 +260,13 @@ def main():
             )
 
     elif not args.train and not args.test:
-        print("[ERROR] No action specified. Please use --train or --test.")
+        print(
+            "[ERROR] No action specified. Please use --train or --test."
+        )
     else:
-        print("[ERROR] You cannot perform training and testing simultaneously.")
+        print(
+            "[ERROR] You cannot perform training and testing simultaneously."
+        )
 
 
 if __name__ == "__main__":
