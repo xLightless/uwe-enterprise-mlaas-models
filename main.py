@@ -17,7 +17,11 @@ import time
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from models.config import RANDOM_STATE, TARGET_VARIABLE_COL_NUM
+from models.config import (
+    RANDOM_STATE,
+    TARGET_VARIABLE_COL_NUM,
+    TESTING_DATA_SIZE
+)
 from models.standard.linear_regression import LinearRegression
 from models.standard.knn import KNN
 
@@ -172,10 +176,13 @@ def add_parser_args():
     return parser
 
 
-def get_data(args):
+def get_data(args=None):
     """
     Load the dataset from the specified path.
     """
+
+    if args is None:
+        return None
 
     if args.data:
         try:
@@ -187,12 +194,22 @@ def get_data(args):
                 raise FileNotFoundError
 
             data = pd.read_csv(args.data)
+            return data
         except FileNotFoundError:
             print(
                 "[WARNING] Dataset in args '--data' not found. " +
                 "Using the default dataset instead..."
             )
-            data = pd.read_csv(insurance_dataset)
+
+            try:
+                data = pd.read_csv(insurance_dataset)
+                return data
+            except FileNotFoundError:
+                print(
+                    "[ERROR] Default dataset not found. " +
+                    "No further action can be taken."
+                )
+                exit()
     else:
         print(
             "[ERROR] No dataset specified. " +
@@ -201,8 +218,8 @@ def get_data(args):
         )
 
     if data.empty:
-        print("[ERROR] Dataset is empty.")
-        return None
+        print("[ERROR] Dataset is empty. No further action can be taken.")
+        exit()
 
 
 def main():
@@ -231,10 +248,7 @@ def main():
 
         print("[INFO] Attempting to load the dataset...")
         start_time = time.time()
-        data = get_data(args.data)
-
-        if not data:
-            return None
+        data = get_data(args)
 
         end_time = time.time()
         print(
@@ -251,7 +265,7 @@ def main():
         X_train, X_test, y_train, y_test = train_test_split(
             X,
             y,
-            test_size=0.4,
+            test_size=TESTING_DATA_SIZE,
             random_state=args.seed
         )
 
