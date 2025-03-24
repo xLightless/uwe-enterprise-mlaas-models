@@ -108,9 +108,9 @@ def evaluate_model(model_name, model, X_test, y_test, verbose):
     return predictions
 
 
-def main():
+def add_parser_args():
     """
-    Main entry point for the Engineering of AI Models.
+    Add the parser arguments to the parser.
     """
 
     parser = argparse.ArgumentParser(
@@ -169,6 +169,48 @@ def main():
         default=False
     )
 
+    return parser
+
+
+def get_data(args):
+    """
+    Load the dataset from the specified path.
+    """
+
+    if args.data:
+        try:
+            if not args.data.endswith(".csv"):
+                raise FileNotFoundError
+            elif not os.path.exists(args.data):
+                raise FileNotFoundError
+            elif os.path.exists(insurance_dataset):
+                raise FileNotFoundError
+
+            data = pd.read_csv(args.data)
+        except FileNotFoundError:
+            print(
+                "[WARNING] Dataset in args '--data' not found. " +
+                "Using the default dataset instead..."
+            )
+            data = pd.read_csv(insurance_dataset)
+    else:
+        print(
+            "[ERROR] No dataset specified. " +
+            "Please use --data <dataset_path> OR " +
+            "leave it empty to use the default dataset."
+        )
+
+    if data.empty:
+        print("[ERROR] Dataset is empty.")
+        return None
+
+
+def main():
+    """
+    Main entry point for the Engineering of AI Models.
+    """
+
+    parser = add_parser_args()
     args = parser.parse_args()
     print("*** Executing args *** \n- " + "\n- ".join(
         f"{key}: {value}" for key, value in args.__dict__.items()
@@ -189,30 +231,9 @@ def main():
 
         print("[INFO] Attempting to load the dataset...")
         start_time = time.time()
-        if args.data:
-            try:
-                if not args.data.endswith(".csv"):
-                    raise FileNotFoundError
-                elif not os.path.exists(args.data):
-                    raise FileNotFoundError
-                elif os.path.exists(insurance_dataset):
-                    raise FileNotFoundError
+        data = get_data(args.data)
 
-                data = pd.read_csv(args.data)
-            except FileNotFoundError:
-                print(
-                    "[WARNING] Dataset in args '--data' not found. " +
-                    "Using the default dataset instead..."
-                )
-                data = pd.read_csv(insurance_dataset)
-        else:
-            print(
-                "[ERROR] No dataset specified. " +
-                "Please use --data <dataset_path> OR " +
-                "leave it empty to use the default dataset."
-            )
-
-        if data.empty:
+        if not data:
             return None
 
         end_time = time.time()
