@@ -277,14 +277,16 @@ def main():
             if args.download:
                 print("[INFO] Downloading dataset...")
                 start_time = time.time()
-                processor.download(
+                download_state = processor.download(
                     datasets_processed_directory +
-                    df_file_name
+                    df_file_name,
+                    processor.df,
                 )
                 end_time = time.time()
-                print("[INFO] Downloaded dataset. Took %f seconds." % (
-                    end_time - start_time
-                ))
+                if download_state is None:
+                    print("[INFO] Downloaded dataset. Took %f seconds." % (
+                        end_time - start_time
+                    ))
                 return None
 
             print("[INFO] Dataset columns:")
@@ -295,6 +297,9 @@ def main():
         elif args.o == 'num':
             print("[INFO] Numerical columns:")
             print(processor.df[processor.get_numerical_columns()])
+
+            total_missing_numerical = processor.df[processor.get_numerical_columns()].isnull().sum().sum()
+            print(f"[INFO] Total missing numerical values: {total_missing_numerical}")
             return None
 
         elif args.o == 'cat':
@@ -346,6 +351,24 @@ def main():
                         args.row, df_file_name
                     )
                 )
+
+        missing_values = processor.df.isnull().sum().sum()
+        if missing_values > 0:
+            print(
+                "[WARNING] Missing values found in the dataset: \n" +
+                "- Categorical values: %s\n" % (
+                    data.df[
+                        processor.get_categorical_columns()
+                    ].isnull().sum().sum()
+                ) +
+
+                "- Numerical values: %s\n" % (
+                    data.df[
+                    processor.get_numerical_columns()
+                    ].isnull().sum().sum()
+                )
+            )
+
         return None
 
     if (args.model is None and args.o) and not args.install:

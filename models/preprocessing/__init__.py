@@ -13,9 +13,10 @@ import pandas as pd
 # )
 # from sklearn.compose import ColumnTransformer
 # from sklearn.pipeline import Pipeline
-# from sklearn.impute import SimpleImputer
+from sklearn.impute import SimpleImputer
 import numpy as np
 import re
+import os
 
 
 class DataPreprocessor:
@@ -36,17 +37,17 @@ class DataPreprocessor:
         self,
         df: pd.DataFrame
     ):
-        self._df = df
+        self.__df = df  # original dataframe
         self.df = self.process_df(df)
         self.labels = self.get_labels(df)
 
-    def __format_column_words(
+    def __format_column_name_words(
         self,
         cols: str
     ) -> str:
         """
-        This internal function seperates words in a string by
-        spaces and upper case each word.
+        This internal function seperates words in a string with
+        spaces and upper cases each word.
 
         returns: str
         """
@@ -71,7 +72,7 @@ class DataPreprocessor:
         # then remove any inconsistencies in the column names
         data_frame = df.copy()
         data_frame.columns = [
-            self.__format_column_words(col)
+            self.__format_column_name_words(col)
                 .title().replace(' ', '')
                 .replace('_', '')
                 for col in df.columns
@@ -102,24 +103,70 @@ class DataPreprocessor:
         """
         return self.labels['numerical']
 
+    def get_missing_value_columns(self, df):
+        """
+        Get the columns with missing values.
+        """
+        return df.columns[df.isnull().any()].tolist()
+
     def process_df(self, df):
         """
         Processes the dataframe, returning updated rows, and column names.
         """
+
+        # Update the dataframe column names
         labels = self.get_labels(df)
         updated_cols = [
-            self.__format_column_words(col)
+            self.__format_column_name_words(col)
             .title().replace(' ', '').replace('_', '')
             for col in df.columns
         ]
 
+        if len(updated_cols) != len(df.columns):
+            raise ValueError("Column names not updated.")
+
         df.columns = updated_cols
+
+        missing_values_cols = self.get_missing_value_columns(df)
+        if missing_values_cols:
+            # Get the labels of the dataframe
+            numerical_cols = labels['numerical']
+            categorical_cols = labels['categorical']
+
+            # Search for missing values
+            total_missing_nums = df[numerical_cols].isnull().sum().sum()
+            total_missing_cats = df[categorical_cols].isnull().sum().sum()
+            print(
+                "[WARNING] Missing values found. " +
+                  "If populating value is 0, " +
+                  "this does not always mean the existing columns are filled."
+            )
+
+            # Fill missing numerical values using imputation
+            if numerical_cols.any():
+                imputer = SimpleImputer(strategy='most_frequent')
+                df[numerical_cols] = imputer.fit_transform(df[numerical_cols])
+
+            print(
+                "[INFO] Populated %s numerical values." % total_missing_nums
+            )
+
+            if categorical_cols.any():
+                imputer = SimpleImputer(strategy='most_frequent')
+                df[categorical_cols] = imputer.fit_transform(df[categorical_cols])
+
+            print(
+                "[INFO] Populated %s categorical values." % (
+                    df[categorical_cols].isnull().sum().sum()
+                )
+            )
+
         return df
 
     def download(
         self,
         path: str = "",
-        df=None
+        df: pd.DataFrame=None
     ):
         """
         Download the preprocessed data as a CSV file.
@@ -131,12 +178,23 @@ class DataPreprocessor:
         returns: None
         """
 
-        if df and len(path) > 0:
-            self.df.to_csv(path, index=False)
+        # If the previous file exists, remove it, then download the new file
+        if len(path) > 0 and os.path.exists(path):
+            try:
+                os.remove(path)
+            except PermissionError:
+                print(
+                    "[ERROR] The file you are trying to remove " +
+                    "is currently open. Please close it and try again."
+                )
+                return False
+
+        if df is not None and not df.empty and len(path) > 0:
+            df.to_csv(path, index=False)
             return None
 
-        elif df and len(path) == 0:
-            return self.df.to_csv(index=False)
+        elif df is not None and not df.empty and len(path) == 0:
+            return df.to_csv(index=False)
 
         df_cols = self.get_labels(self.df)
         nums = df_cols['numerical'].tolist()
