@@ -201,6 +201,19 @@ def add_parser_args():
 
     return parser
 
+def load_dataset(args):
+    """
+    Load the dataset from the specified path.
+    """
+    if not args.data.endswith(".csv"):
+        raise FileNotFoundError
+    elif not os.path.exists(args.data):
+        raise FileNotFoundError
+    elif os.path.exists(insurance_dataset):
+        raise FileNotFoundError
+
+    data = pd.read_csv(args.data)
+    return data
 
 def get_data(args=None):
     """
@@ -212,15 +225,7 @@ def get_data(args=None):
 
     if args.data:
         try:
-            if not args.data.endswith(".csv"):
-                raise FileNotFoundError
-            elif not os.path.exists(args.data):
-                raise FileNotFoundError
-            elif os.path.exists(insurance_dataset):
-                raise FileNotFoundError
-
-            data = pd.read_csv(args.data)
-            return data
+            data = load_dataset(args)
         except FileNotFoundError:
             # print(
             #     "[WARNING] Dataset in args '--data' not found. " +
