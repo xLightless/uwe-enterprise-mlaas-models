@@ -74,8 +74,7 @@ class DataPreprocessor:
         data_frame.columns = [
             self.__format_column_name_words(col)
                 .title().replace(' ', '')
-                .replace('_', '')
-                for col in df.columns
+                .replace('_', '') for col in df.columns
         ]
 
         numerical_cols = data_frame.select_dtypes(
@@ -138,8 +137,8 @@ class DataPreprocessor:
             total_missing_cats = df[categorical_cols].isnull().sum().sum()
             print(
                 "[WARNING] Missing values found. " +
-                  "If populating value is 0, " +
-                  "this does not always mean the existing columns are filled."
+                "If populating value is 0, " +
+                "this does not always mean the existing columns are filled."
             )
 
             # Fill missing numerical values using imputation
@@ -153,11 +152,13 @@ class DataPreprocessor:
 
             if categorical_cols.any():
                 imputer = SimpleImputer(strategy='most_frequent')
-                df[categorical_cols] = imputer.fit_transform(df[categorical_cols])
+                df[categorical_cols] = imputer.fit_transform(
+                    df[categorical_cols]
+                )
 
             print(
                 "[INFO] Populated %s categorical values." % (
-                    df[categorical_cols].isnull().sum().sum()
+                    total_missing_cats
                 )
             )
 
@@ -166,7 +167,7 @@ class DataPreprocessor:
     def download(
         self,
         path: str = "",
-        df: pd.DataFrame=None
+        df: pd.DataFrame = None
     ):
         """
         Download the preprocessed data as a CSV file.

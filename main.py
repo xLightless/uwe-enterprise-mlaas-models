@@ -298,8 +298,14 @@ def main():
             print("[INFO] Numerical columns:")
             print(processor.df[processor.get_numerical_columns()])
 
-            total_missing_numerical = processor.df[processor.get_numerical_columns()].isnull().sum().sum()
-            print(f"[INFO] Total missing numerical values: {total_missing_numerical}")
+            total_missing_numerical = processor.df[
+                processor.get_numerical_columns()
+            ].isnull().sum().sum()
+            print(
+                "[INFO] Total missing numerical values: %s" % (
+                    total_missing_numerical
+                )
+            )
             return None
 
         elif args.o == 'cat':
@@ -357,14 +363,14 @@ def main():
             print(
                 "[WARNING] Missing values found in the dataset: \n" +
                 "- Categorical values: %s\n" % (
-                    data.df[
+                    processor.df[
                         processor.get_categorical_columns()
                     ].isnull().sum().sum()
                 ) +
 
                 "- Numerical values: %s\n" % (
-                    data.df[
-                    processor.get_numerical_columns()
+                    processor.df[
+                        processor.get_numerical_columns()
                     ].isnull().sum().sum()
                 )
             )
