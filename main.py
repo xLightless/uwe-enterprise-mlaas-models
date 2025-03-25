@@ -201,6 +201,7 @@ def add_parser_args():
 
     return parser
 
+
 def load_dataset(args):
     """
     Load the dataset from the specified path.
@@ -214,6 +215,7 @@ def load_dataset(args):
 
     data = pd.read_csv(args.data)
     return data
+
 
 def get_data(args=None):
     """
@@ -253,6 +255,33 @@ def get_data(args=None):
         exit()
 
 
+def check_missing_values(processor: DataPreprocessor):
+    """
+    Check for missing values in the dataset being processed.
+
+    - If missing values are found, print a warning message.
+    """
+
+    print("test")
+
+    missing_values = processor.df.isnull().sum().sum()
+    if missing_values > 0:
+        print(
+            "[WARNING] Missing values found in the dataset: \n" +
+            "- Categorical values: %s\n" % (
+                processor.df[
+                    processor.get_categorical_columns()
+                ].isnull().sum().sum()
+            ) +
+
+            "- Numerical values: %s\n" % (
+                processor.df[
+                    processor.get_numerical_columns()
+                ].isnull().sum().sum()
+            )
+        )
+
+
 def main():
     """
     Main entry point for the Engineering of AI Models.
@@ -277,6 +306,12 @@ def main():
         df = get_data(args)
         df_file_name = os.path.basename(args.data)
         processor = DataPreprocessor(df=df)
+
+        # Check for missing values and tell the user, but continue
+        # any further actions, for various reasons.
+        check_missing_values(
+            processor=processor
+        )
 
         if args.o == 'cols':
             if args.download:
@@ -362,24 +397,6 @@ def main():
                         args.row, df_file_name
                     )
                 )
-
-        missing_values = processor.df.isnull().sum().sum()
-        if missing_values > 0:
-            print(
-                "[WARNING] Missing values found in the dataset: \n" +
-                "- Categorical values: %s\n" % (
-                    processor.df[
-                        processor.get_categorical_columns()
-                    ].isnull().sum().sum()
-                ) +
-
-                "- Numerical values: %s\n" % (
-                    processor.df[
-                        processor.get_numerical_columns()
-                    ].isnull().sum().sum()
-                )
-            )
-
         return None
 
     if (args.model is None and args.o) and not args.install:
