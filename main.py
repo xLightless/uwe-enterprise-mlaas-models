@@ -282,6 +282,7 @@ def check_missing_values(processor: DataPreprocessor):
         )
 
 
+# flake8: noqa: C901
 def main():
     """
     Main entry point for the Engineering of AI Models.
