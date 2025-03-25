@@ -22,19 +22,22 @@ from models.config import (
     TARGET_VARIABLE_COL_NUM,
     TESTING_DATA_SIZE
 )
-from models.standard.linear_regression import LinearRegression
-from models.standard.knn import KNN
+from models.types.standard.linear_regression import LinearRegression
+from models.types.standard.knn import KNN
+
+from models.preprocessing import DataPreprocessor
 
 # Directory Paths
 current_directory = os.path.dirname(
     os.path.abspath("main.ipynb")
 ) + "\\"
 
-datasets_directory = current_directory + "datasets\\"
+datasets_raw_directory = current_directory + "datasets\\raw\\"
+datasets_processed_directory = current_directory + "datasets\\processed\\"
 
 # Files and Datasets
 requirements = current_directory + "requirements.txt"
-insurance_dataset = datasets_directory + "insurance.csv"
+insurance_dataset = datasets_raw_directory + "insurance.csv"
 
 
 def install(requirements):
@@ -121,6 +124,37 @@ def add_parser_args():
         description="Run various machine learning models"
     )
 
+    # Data options
+    parser.add_argument(
+        "--data",
+        type=str,
+        required=False,
+        help="Dataset file path (CSV format)",
+        default=insurance_dataset
+    )
+
+    parser.add_argument(
+        "--o",
+        type=str,
+        help="Outputs the datasets columns",
+        default=False
+    )
+
+    parser.add_argument(
+        "--download",
+        action="store_true",
+        help="Downloads the dataset to the specified path",
+        default=False
+    )
+
+    parser.add_argument(
+        "--row",
+        type=int,
+        help="Outputs the datasets row",
+        default=False
+    )
+
+    # Install requirements
     parser.add_argument(
         "--install",
         action="store_true",
@@ -128,21 +162,13 @@ def add_parser_args():
         default=False
     )
 
+    # Model options
     parser.add_argument(
         "--model",
         type=str,
         required=False,
         help="Specify the model to use, e.g. linear",
         default=None
-    )
-
-    # Optional arguments
-    parser.add_argument(
-        "--data",
-        type=str,
-        required=False,
-        help="Dataset file path (CSV format)",
-        default=insurance_dataset
     )
 
     parser.add_argument(
@@ -196,10 +222,10 @@ def get_data(args=None):
             data = pd.read_csv(args.data)
             return data
         except FileNotFoundError:
-            print(
-                "[WARNING] Dataset in args '--data' not found. " +
-                "Using the default dataset instead..."
-            )
+            # print(
+            #     "[WARNING] Dataset in args '--data' not found. " +
+            #     "Using the default dataset instead..."
+            # )
 
             try:
                 data = pd.read_csv(insurance_dataset)
@@ -229,9 +255,9 @@ def main():
 
     parser = add_parser_args()
     args = parser.parse_args()
-    print("*** Executing args *** \n- " + "\n- ".join(
-        f"{key}: {value}" for key, value in args.__dict__.items()
-    ))
+    # print("*** Executing args *** \n- " + "\n- ".join(
+    #     f"{key}: {value}" for key, value in args.__dict__.items()
+    # ))
 
     if args.install:
         print("[INFO] Installing dependencies...")
@@ -239,7 +265,90 @@ def main():
         print("[INFO] Dependencies installed. No further action can be taken.")
         return None
 
-    if args.model is None and not args.install:
+    if ((os.path.exists(datasets_raw_directory)) or
+            (os.path.exists(args.data)) and not
+            args.install):
+
+        df = get_data(args)
+        df_file_name = os.path.basename(args.data)
+        processor = DataPreprocessor(df=df)
+
+        if args.o == 'cols':
+            if args.download:
+                print("[INFO] Downloading dataset...")
+                start_time = time.time()
+                processor.download(
+                    datasets_processed_directory +
+                    df_file_name
+                )
+                end_time = time.time()
+                print("[INFO] Downloaded dataset. Took %f seconds." % (
+                    end_time - start_time
+                ))
+                return None
+
+            print("[INFO] Dataset columns:")
+            for idx, label in enumerate(processor.labels, start=1):
+                print("\n", processor.labels[label])
+            return None
+
+        elif args.o == 'num':
+            print("[INFO] Numerical columns:")
+            print(processor.df[processor.get_numerical_columns()])
+            return None
+
+        elif args.o == 'cat':
+            print("[INFO] Categorical columns:")
+            print(processor.df[processor.get_categorical_columns()])
+            return None
+
+        elif args.o == '.':
+            print("\nDataset head of '%s':\n" % df_file_name, df.head())
+            return None
+
+        elif args.o and args.o != '':
+            try:
+                if args.row:
+                    column_name = args.o
+                    print("\nDataframe row of column '%s' in '%s':\n" % (
+                        column_name, df_file_name
+                        ),
+                        df[column_name].iloc[args.row]
+                    )
+
+                    return None
+                else:
+                    print("\nDataframe column '%s' in '%s':\n" % (
+                        args.o, df_file_name
+                        ),
+                        df[args.o]
+                    )
+                    return None
+            except KeyError:
+                column_name = args.o
+                print(
+                    "[ERROR] Column '%s' not found in '%s'." % (
+                        column_name, df_file_name
+                    )
+                )
+
+            except UnboundLocalError:
+                column_name = args.o
+                print(
+                    "[ERROR] Column '%s' not found in '%s'." % (
+                        args.o, df_file_name
+                    )
+                )
+
+            except IndexError:
+                print(
+                    "[ERROR] Row '%s' not found in '%s'." % (
+                        args.row, df_file_name
+                    )
+                )
+        return None
+
+    if (args.model is None and args.o) and not args.install:
         print("[ERROR] No model specified. Please use --model <model_name>.")
         return None
 
@@ -256,6 +365,22 @@ def main():
                 end_time - start_time
             )
         )
+
+        print(
+            "[INFO] Preprocessing the dataset..."
+        )
+        start_time = time.time()
+        processor = DataPreprocessor(df=data)
+        print(processor.labels)
+        end_time = time.time()
+        print(
+            "[INFO] Data Preprocessing complete. Took %f seconds." % (
+                end_time - start_time
+            )
+        )
+
+        # Preprocess the data
+        data = DataPreprocessor(df=data)
 
         y = data.iloc[:, TARGET_VARIABLE_COL_NUM].values  # Target variable
         X = data.iloc[:, 1:].values  # Features
@@ -284,7 +409,7 @@ def main():
         ))
 
     elif args.test and not args.train:
-        if (os.path.exists(datasets_directory)):
+        if (os.path.exists(datasets_raw_directory)):
             print("Evaluating %s model..." % args.model)
             evaluate_model(
                 args.model,
