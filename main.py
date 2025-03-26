@@ -12,6 +12,7 @@ import subprocess
 import pandas as pd
 import argparse
 import os
+import sys
 import time
 
 from sklearn.model_selection import train_test_split
@@ -242,7 +243,7 @@ def get_data(args=None):
                     "[ERROR] Default dataset not found. " +
                     "No further action can be taken."
                 )
-                exit()
+                sys.exit()
     else:
         print(
             "[ERROR] No dataset specified. " +
@@ -262,8 +263,6 @@ def check_missing_values(processor: DataPreprocessor):
     - If missing values are found, print a warning message.
     """
 
-    print("test")
-
     missing_values = processor.df.isnull().sum().sum()
     if missing_values > 0:
         print(
@@ -281,6 +280,87 @@ def check_missing_values(processor: DataPreprocessor):
             )
         )
 
+def run_models(args, processor: DataPreprocessor):
+    """
+    Run the select model in args for training or testing.
+    """
+
+    if (args.model is None and args.o) and not args.install:
+        print("[ERROR] No model specified. Please use --model <model_name>.")
+        return None
+
+    # Executes the training portion of the model on the split dataset.
+    if args.train and not args.test:
+
+        print("[INFO] Attempting to load the dataset...")
+        start_time = time.time()
+        data = get_data(args)
+
+        end_time = time.time()
+        print(
+            "[INFO] Dataset loaded. Took %f seconds." % (
+                end_time - start_time
+            )
+        )
+
+        print(
+            "[INFO] Preprocessing the dataset..."
+        )
+        # start_time = time.time()
+        # processor = DataPreprocessor(df=data)
+        # # print(processor.labels)
+        # end_time = time.time()
+        print(
+            "[INFO] Data Preprocessing complete. Took %f seconds." % (
+                end_time - start_time
+            )
+        )
+
+        y = processor.df.iloc[:, TARGET_VARIABLE_COL_NUM].values  # Target variable
+        X = processor.df.iloc[:, 1:].values  # Features
+
+        # Split the data into training and testing sets
+        # (60% training, 40% testing)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X,
+            y,
+            test_size=TESTING_DATA_SIZE,
+            random_state=args.seed
+        )
+
+        print("[INFO] Training model...")
+        start_time = time.time()
+        model = train_model(
+            args.model,
+            X_train,
+            y_train,
+            X_test,
+            y_test
+        )
+        end_time = time.time()
+        print("[INFO] Training complete. Took %f seconds." % (
+            end_time - start_time
+        ))
+
+    elif args.test and not args.train:
+        if (os.path.exists(datasets_raw_directory)):
+            print("Evaluating %s model..." % args.model)
+            evaluate_model(
+                args.model,
+                model,
+                X_test,
+                y_test,
+                args.verbose
+            )
+
+    elif not args.train and not args.test:
+        print(
+            "[ERROR] No action specified. Please use --train or --test."
+        )
+    else:
+        print(
+            "[ERROR] You cannot perform training and testing simultaneously."
+        )
 
 # flake8: noqa: C901
 def main():
@@ -300,7 +380,7 @@ def main():
         print("[INFO] Dependencies installed. No further action can be taken.")
         return None
 
-    if ((os.path.exists(datasets_raw_directory)) or
+    elif ((os.path.exists(datasets_raw_directory)) or
             (os.path.exists(args.data)) and not
             args.install):
 
@@ -383,6 +463,7 @@ def main():
                         column_name, df_file_name
                     )
                 )
+                return None
 
             except UnboundLocalError:
                 column_name = args.o
@@ -391,6 +472,7 @@ def main():
                         args.o, df_file_name
                     )
                 )
+                return None
 
             except IndexError:
                 print(
@@ -398,87 +480,15 @@ def main():
                         args.row, df_file_name
                     )
                 )
-        return None
+                return None
+        # return None
 
-    if (args.model is None and args.o) and not args.install:
-        print("[ERROR] No model specified. Please use --model <model_name>.")
-        return None
-
-    # Executes the training portion of the model on the split dataset.
-    if args.train and not args.test:
-
-        print("[INFO] Attempting to load the dataset...")
-        start_time = time.time()
-        data = get_data(args)
-
-        end_time = time.time()
-        print(
-            "[INFO] Dataset loaded. Took %f seconds." % (
-                end_time - start_time
+        elif args.model is not None:
+            run_models(args, processor=processor)
+        else:
+            print(
+                "[ERROR] Something went wrong, for help type py main.py [-h]"
             )
-        )
-
-        print(
-            "[INFO] Preprocessing the dataset..."
-        )
-        start_time = time.time()
-        processor = DataPreprocessor(df=data)
-        print(processor.labels)
-        end_time = time.time()
-        print(
-            "[INFO] Data Preprocessing complete. Took %f seconds." % (
-                end_time - start_time
-            )
-        )
-
-        # Preprocess the data
-        data = DataPreprocessor(df=data)
-
-        y = data.iloc[:, TARGET_VARIABLE_COL_NUM].values  # Target variable
-        X = data.iloc[:, 1:].values  # Features
-
-        # Split the data into training and testing sets
-        # (60% training, 40% testing)
-        X_train, X_test, y_train, y_test = train_test_split(
-            X,
-            y,
-            test_size=TESTING_DATA_SIZE,
-            random_state=args.seed
-        )
-
-        print("[INFO] Training model...")
-        start_time = time.time()
-        model = train_model(
-            args.model,
-            X_train,
-            y_train,
-            X_test,
-            y_test
-        )
-        end_time = time.time()
-        print("[INFO] Training complete. Took %f seconds." % (
-            end_time - start_time
-        ))
-
-    elif args.test and not args.train:
-        if (os.path.exists(datasets_raw_directory)):
-            print("Evaluating %s model..." % args.model)
-            evaluate_model(
-                args.model,
-                model,
-                X_test,
-                y_test,
-                args.verbose
-            )
-
-    elif not args.train and not args.test:
-        print(
-            "[ERROR] No action specified. Please use --train or --test."
-        )
-    else:
-        print(
-            "[ERROR] You cannot perform training and testing simultaneously."
-        )
 
 
 if __name__ == "__main__":
