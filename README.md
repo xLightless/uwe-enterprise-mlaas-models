@@ -9,5 +9,6 @@ For training, testing, downloading, or viewing the models and output, please use
 ## Commands
 You can write complex commands. An example is below:
 - `py main.py --data path/to/data/data.csv --o cols --download`
+- `py main.py --o . --target SettlementValue --protected "[Accident Date, Claim Date]" --model linear --train`
 
 This will locate the synthetic data, provide an output, then download the processed data into the same directory.

@@ -6,42 +6,39 @@ configuration file, which will be utilised by the MLAAS afterwards.
 
 To convienently train a model, simply run the following command:
     python main.py --model <model_name> --data <dataset_path> [optional args]
+
+Written by Reece Turner, 22036698.
 """
 
-import subprocess
-import pandas as pd
 import argparse
 import os
 import sys
 import time
+import subprocess
+import pandas as pd
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from models.config import (
-    RANDOM_STATE,
+from models import (
+    DataPreprocessor,
+    requirements,
+    datasets_processed_directory,
+    datasets_raw_directory,
+    insurance_dataset,
     TARGET_VARIABLE_COL_NUM,
-    TESTING_DATA_SIZE
+    TESTING_DATA_SIZE,
+    gdpr_protected_cols,
+    invalid_cols,
+    medical_protected_cols,
+    datetime_cols,
+    LinearRegression,
+    KNN,
+    arguments,
 )
-from models.types.standard.linear_regression import LinearRegression
-from models.types.standard.knn import KNN
-
-from models.preprocessing import DataPreprocessor
-
-# Directory Paths
-current_directory = os.path.dirname(
-    os.path.abspath("main.ipynb")
-) + "\\"
-
-datasets_raw_directory = current_directory + "datasets\\raw\\"
-datasets_processed_directory = current_directory + "datasets\\processed\\"
-
-# Files and Datasets
-requirements = current_directory + "requirements.txt"
-insurance_dataset = datasets_raw_directory + "insurance.csv"
 
 
-def install(requirements):
+def install(requirements_path: str):
     """
     Install all the relevent project dependencies.
     """
@@ -51,9 +48,9 @@ def install(requirements):
             activate_script = os.path.join('.venv', 'bin', 'activate')
             subprocess.check_call(['source', activate_script], shell=True)
 
-        with open(requirements, 'r') as f:
-            requirements = f.read().splitlines()
-            subprocess.check_call(['pip', 'install'] + requirements)
+        with open(requirements_path, 'r', encoding='utf-8') as f:
+            r = f.read().splitlines()
+            subprocess.check_call(['pip', 'install'] + r)
         print("[INFO] Installed dependencies.")
 
     except FileNotFoundError:
@@ -86,7 +83,7 @@ def train_model(
             print(model_selected % "K-Nearest Neighbours")
         case _:
             print("[ERROR] Model %s not found." % model_name)
-            exit()
+            sys.exit()
 
     # Fit the model to the training data
     model.fit(X_train, y_train)
@@ -125,80 +122,11 @@ def add_parser_args():
         description="Run various machine learning models"
     )
 
-    # Data options
-    parser.add_argument(
-        "--data",
-        type=str,
-        required=False,
-        help="Dataset file path (CSV format)",
-        default=insurance_dataset
-    )
+    # Define arguments in a dictionary
 
-    parser.add_argument(
-        "--o",
-        type=str,
-        help="Outputs the datasets columns",
-        default=False
-    )
 
-    parser.add_argument(
-        "--download",
-        action="store_true",
-        help="Downloads the dataset to the specified path",
-        default=False
-    )
-
-    parser.add_argument(
-        "--row",
-        type=int,
-        help="Outputs the datasets row",
-        default=False
-    )
-
-    # Install requirements
-    parser.add_argument(
-        "--install",
-        action="store_true",
-        help="Installs dependencies for this service",
-        default=False
-    )
-
-    # Model options
-    parser.add_argument(
-        "--model",
-        type=str,
-        required=False,
-        help="Specify the model to use, e.g. linear",
-        default=None
-    )
-
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Outputs model information",
-        default=False
-    )
-
-    parser.add_argument(
-        "--seed",
-        type=int,
-        help="Random state seed for reproducing results (default: 42)",
-        default=RANDOM_STATE
-    )
-
-    parser.add_argument(
-        "--train",
-        action="store_true",
-        help="Train the specified model",
-        default=False
-    )
-
-    parser.add_argument(
-        "--test",
-        action="store_true",
-        help="Test the specified model",
-        default=False
-    )
+    for arg, params in arguments.items():
+        parser.add_argument(arg, **params)
 
     return parser
 
@@ -253,7 +181,7 @@ def get_data(args=None):
 
     if data.empty:
         print("[ERROR] Dataset is empty. No further action can be taken.")
-        exit()
+        sys.exit()
 
 
 def check_missing_values(processor: DataPreprocessor):
@@ -273,7 +201,7 @@ def check_missing_values(processor: DataPreprocessor):
                 ].isnull().sum().sum()
             ) +
 
-            "- Numerical values: %s\n" % (
+            "- Numerical values (likely already imputed): %s\n" % (
                 processor.df[
                     processor.get_numerical_columns()
                 ].isnull().sum().sum()
@@ -291,31 +219,6 @@ def run_models(args, processor: DataPreprocessor):
 
     # Executes the training portion of the model on the split dataset.
     if args.train and not args.test:
-
-        print("[INFO] Attempting to load the dataset...")
-        start_time = time.time()
-        data = get_data(args)
-
-        end_time = time.time()
-        print(
-            "[INFO] Dataset loaded. Took %f seconds." % (
-                end_time - start_time
-            )
-        )
-
-        print(
-            "[INFO] Preprocessing the dataset..."
-        )
-        # start_time = time.time()
-        # processor = DataPreprocessor(df=data)
-        # # print(processor.labels)
-        # end_time = time.time()
-        print(
-            "[INFO] Data Preprocessing complete. Took %f seconds." % (
-                end_time - start_time
-            )
-        )
-
         y = processor.df.iloc[:, TARGET_VARIABLE_COL_NUM].values  # Target variable
         X = processor.df.iloc[:, 1:].values  # Features
 
@@ -325,7 +228,7 @@ def run_models(args, processor: DataPreprocessor):
             X,
             y,
             test_size=TESTING_DATA_SIZE,
-            random_state=args.seed
+            random_state=args.seed,
         )
 
         print("[INFO] Training model...")
@@ -374,7 +277,13 @@ def main():
     #     f"{key}: {value}" for key, value in args.__dict__.items()
     # ))
 
-    if args.install:
+    if (len(sys.argv) == 1):
+        print(
+            "[ERROR] No arguments provided. Please use --help for more information."
+        )
+        return None
+
+    elif args.install:
         print("[INFO] Installing dependencies...")
         install(requirements)
         print("[INFO] Dependencies installed. No further action can be taken.")
@@ -384,9 +293,45 @@ def main():
             (os.path.exists(args.data)) and not
             args.install):
 
+        print("[INFO] Attempting to load and preprocess the dataset...")
+        start_time = time.time()
+
         df = get_data(args)
+        protected_cols: list = None
+
+        if (args.protected == "."):
+                print(
+                    "[WARNING] No protected columns specified. " +
+                      "Using predetermined instead."
+                )
+                protected_cols = (
+                    gdpr_protected_cols +
+                    invalid_cols +
+                    medical_protected_cols +
+                    datetime_cols
+                )
+        else:
+            try:
+                protected_cols_strip = args.protected.strip("[]").split(",")
+                protected_cols = [
+                    col.strip() for col in protected_cols_strip if col.strip()
+                ]
+            except AttributeError:
+                protected_cols = None
+
+        processor = DataPreprocessor(
+            df=df,
+            target_variable=args.target,
+            protected_cols=protected_cols,
+        )
         df_file_name = os.path.basename(args.data)
-        processor = DataPreprocessor(df=df)
+
+        end_time = time.time()
+        print(
+            "[INFO] Data Preprocessing complete. Took %f seconds." % (
+                end_time - start_time
+            )
+        )
 
         # Check for missing values and tell the user, but continue
         # any further actions, for various reasons.
@@ -394,7 +339,11 @@ def main():
             processor=processor
         )
 
-        if args.o == 'cols':
+        if args.model is not None:
+            run_models(args, processor=processor)
+            return None
+
+        elif args.o == 'cols':
             if args.download:
                 print("[INFO] Downloading dataset...")
                 start_time = time.time()
@@ -435,8 +384,15 @@ def main():
             return None
 
         elif args.o == '.':
-            print("\nDataset head of '%s':\n" % df_file_name, df.head())
-            return None
+            if (args.target is not None) and (args.target in processor.df.columns):
+                print(
+                    f"\nDataframe target variable '{args.target}' in '{df_file_name}':\n",
+                    processor.df.drop(columns=[args.target]).head()
+                )
+                return None
+            else:
+                print("\nDataset head of '%s':\n" % df_file_name, df.head())
+                return None
 
         elif args.o and args.o != '':
             try:
@@ -483,8 +439,9 @@ def main():
                 return None
         # return None
 
-        elif args.model is not None:
-            run_models(args, processor=processor)
+        # elif args.model is not None:
+        #     run_models(args, processor=processor)
+
         else:
             print(
                 "[ERROR] Something went wrong, for help type py main.py [-h]"
