@@ -322,7 +322,7 @@ def main():
         processor = DataPreprocessor(
             df=df,
             target_variable=args.target,
-            protected_cols=protected_cols,
+            protected_cols=protected_cols
         )
         df_file_name = os.path.basename(args.data)
 

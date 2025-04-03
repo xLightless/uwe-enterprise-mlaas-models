@@ -34,13 +34,24 @@ class Encoder:
         :return: Updated DataFrame with encoded columns.
         """
         # Normalize binary-like values to 1 or 0 for all specified columns
+        # binary_mapping = {
+        #     'yes': 1, 'Yes': 1, 'true': 1, 'True': 1,
+        #     'no': 0, 'No': 0, 'false': 0, 'False': 0
+        # }
+        # self.df[columns] = self.df[columns].applymap(
+        #     lambda x: binary_mapping.get(x, x)
+        # )
+
+        # encoder = OrdinalEncoder()
+        # self.df[columns] = encoder.fit_transform(self.df[columns])
+        # return self.df
         binary_mapping = {
             'yes': 1, 'Yes': 1, 'true': 1, 'True': 1,
             'no': 0, 'No': 0, 'false': 0, 'False': 0
         }
-        self.df[columns] = self.df[columns].applymap(
-            lambda x: binary_mapping.get(x, x)
-        )
+
+        for col in columns:
+            self.df[col] = self.df[col].map(lambda x: binary_mapping.get(x, x))
 
         encoder = OrdinalEncoder()
         self.df[columns] = encoder.fit_transform(self.df[columns])

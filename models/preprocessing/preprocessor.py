@@ -17,6 +17,63 @@ from models.config import (
 )
 
 
+def add_injury_prognosis_datetimes(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Adds datetime columns for injury prognosis to the dataframe.
+
+    :param df: The DataFrame to which the datetime columns will be added.
+    :return: Updated DataFrame with datetime columns.
+    """
+    if not pd.api.types.is_datetime64_any_dtype(df['AccidentDate']):
+        df['AccidentDate'] = pd.to_datetime(
+            dict(
+                year=df['AccidentDateYear'],
+                month=df['AccidentDateMonth'],
+                day=df['AccidentDateDay'],
+                hour=df['AccidentDateHour']
+            ),
+            errors='coerce'
+        )
+
+    # Extract numeric duration from InjuryPrognosis (e.g., "5 months" -> 5)
+    df['PrognosisDurationMonths'] = df['InjuryPrognosis'].str.extract(
+        r'(\d+)'
+    ).astype(float)
+
+    # Calculate the new date by adding the duration to the AccidentDate
+    df['PrognosisEndDate'] = df['AccidentDate'] + pd.to_timedelta(
+        df['PrognosisDurationMonths'] * 30, unit='D'
+    )
+
+    # Drop temporary columns if not needed
+    df = df.drop(columns=['PrognosisDurationMonths'])
+
+    return df
+
+
+def accident_claim_delta(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Adds a new column 'AccidentClaimDelta' to the DataFrame, which is the
+    difference in days between 'AccidentDate' and 'ClaimDate'.
+
+    :param df: The DataFrame to which the new column will be added.
+    :return: Updated DataFrame with the new column.
+    """
+    df.loc[:, 'AccidentDate'] = pd.to_datetime(
+        df['AccidentDate'], errors='coerce'
+    )
+    df.loc[:, 'ClaimDate'] = pd.to_datetime(
+        df['ClaimDate'], errors='coerce'
+    )
+
+    # Calculate the difference in days between ClaimDate and AccidentDate
+    df.loc[:, 'AccidentClaimDeltaInDays'] = (
+        df['ClaimDate'] - df['AccidentDate']
+    ).dt.days
+
+    return df
+
+
 class DataPreprocessor:
     """
     The DataPreprocessor class automatically handles the preprocessing of
@@ -29,23 +86,33 @@ class DataPreprocessor:
         self,
         df: pd.DataFrame,
         target_variable: str = None,
-        protected_cols: list[str] = None
-    ):
+        protected_cols: list[str] = None,
+    ) -> None:
         self.protected_cols: list[str] = protected_cols
         self._df = df
-        self.df: pd.DataFrame = self.__process_df(df)
 
+        self.target_variable: str = target_variable
         if target_variable:
             formatted_target_var = self.__format_column_name_words(
                 target_variable
             ).title().replace(' ', '').replace('_', '')
+        else:
+            formatted_target_var = None
 
-            self.target_variable = self.__set_target_variable(
-                formatted_target_var
-            )
+        self.target_variable = self.__set_target_variable(
+            formatted_target_var
+        )
 
         # Get the labels/feature columns of the dataframe
         self.labels: dict = self.get_labels(df)
+
+        # Process the dataframe
+        if (target_variable and len(target_variable) > 0):
+            self.df: pd.DataFrame = self.__process_df(
+                df.drop(columns=[target_variable])
+            )
+        else:
+            self.df: pd.DataFrame = self.__process_df(df)
 
     def __format_column_name_words(
         self,
@@ -75,11 +142,11 @@ class DataPreprocessor:
         """
 
         if target_variable is None:
-            target_variable = self.df.columns[0]
+            target_variable = self._df.columns[0]
             return target_variable
 
         # Check if the column exists in the dataframe
-        if target_variable not in self.df.columns:
+        if target_variable not in self._df.columns:
             raise ValueError(
                 f"Column '{target_variable}' does not exist in the dataframe."
             )
@@ -169,7 +236,8 @@ class DataPreprocessor:
 
         # Identify rows that do not match the expected structure
         invalid_rows = ~df[column_name].astype(str).str.match(
-            expected_structure, na=False)
+            expected_structure, na=False
+        )
 
         if invalid_rows.any():
             print(
@@ -178,6 +246,9 @@ class DataPreprocessor:
             )
 
             if transformation_func:
+                # Fix some deprecation warnings
+                df[column_name] = df[column_name].astype(object)
+
                 # Apply the transformation function to fix invalid rows
                 df.loc[invalid_rows, column_name] = df.loc[
                     invalid_rows, column_name
@@ -196,8 +267,11 @@ class DataPreprocessor:
         """
 
         # Format column names
+        _df = df.copy()
         df = self.__update_column_names(df)
+        df = self.__handle_missing_values(df)
         labels = self.get_labels(df)
+        labels2 = self.get_labels(_df)
 
         # Standardize columns
         # datetime_columns = [col for col in df.columns if "Date" in col]
@@ -223,42 +297,114 @@ class DataPreprocessor:
                 standardizer = DataStandardizer(df)
                 standardized_df = standardizer.standardize_datetime_columns(
                     datetime_cols=datetime_columns,
-                    drop_original=True
+                    drop_original=False
                 )
-
-                print("Standardized df: ", standardized_df.columns)
 
                 # Encode columns
                 encoder = Encoder(standardized_df)
+                df_copy = df.copy()
+
                 labels = self.get_labels(standardized_df)
                 datetime_columns = labels['datetime']
-                encoder.encode_cyclical(datetime_columns)
 
                 # Encodes categorical columns - currently disabled for testing.
-                # encoder.encode_oridinal(labels['categorical'])
-                scaler = Scaler(encoder.df)
+                encoder.encode_oridinal(labels['categorical'])
+                scaler = Scaler(standardized_df)
 
                 date_year_cols = [
-                    col for col in encoder.df.columns
+                    col for col in scaler.df.columns
                     if "Year" in col
                 ]
 
                 scaler.minmax(date_year_cols)
+                df_dates = df_copy[datetime_cols]
+                df_date_claim_delta = accident_claim_delta(
+                    df_dates
+                )
+
+                accident_claim_delta_days = df_date_claim_delta[
+                    'AccidentClaimDeltaInDays'
+                ]
+
+                scaler.df['AccidentClaimDeltaInDays'] = (
+                    accident_claim_delta_days
+                )
 
                 # Transform Injury Prognosis
                 expected_structure = r"^\d+\smonths$"
-                df = self.__transform_special_data(
-                    df=df,
+                scaled_df = self.__transform_special_data(
+                    df=scaler.df,
                     column_name="InjuryPrognosis",
                     expected_structure=expected_structure,
                     transformation_func=self.extract_months
                 )
 
-                # df = scaler.df
-                # df = standardized_df
-        # Impute missing values
-        df = self.__handle_missing_values(df)
+                # Convert InjuryPrognosis from months to days
+                scaler.df['InjuryPrognosisInDays'] = (
+                    scaler.df['InjuryPrognosis']
+                    .str.extract(r'(\d+)')  # Extract numeric value
+                    .astype(float) * 30     # Convert months to days
+                )
 
+                # Apply Min-Max scaling to the InjuryPrognosisInDays column
+                scaler.minmax(['InjuryPrognosisInDays'])
+
+                df1 = scaled_df  # Contains encoded columns
+                df2 = df_copy
+
+                df2 = add_injury_prognosis_datetimes(df2)
+
+                # After scaling, we can then take the dataframe and encode it.
+                encoder = Encoder(df2)
+                cyclical_columns = [
+                    col for col in datetime_columns
+                    if not col.lower().endswith("date")
+                ]
+                df2 = encoder.encode_cyclical(cyclical_columns)
+
+                # Merge columns from df2 into df1
+                df2 = df2.loc[:, ~df2.columns.isin(df1.columns)]
+                df1 = pd.concat([df1, df2], axis=1)
+
+                # Standardize the Injury Prognosis columns
+                standardizer = DataStandardizer(df1)
+                standardizer.standardize_datetime_columns(
+                    datetime_cols=["PrognosisEndDate"],
+                    drop_original=True
+                )
+
+                # Encode the new features
+                prognosis_date_columns = []
+                for col in df1.columns:
+                    if "PrognosisEndDate" in col:
+                        prognosis_date_columns.append(col)
+
+                encoder = Encoder(df1)
+                encoder.encode_cyclical(
+                    prognosis_date_columns
+                )
+
+                updated_datetime_cols = []
+                for col in datetime_columns:
+                    if col not in date_year_cols:
+                        updated_datetime_cols.append(col)
+
+                df1 = encoder.df.drop(
+                    columns=(
+                        datetime_cols +
+                        ["InjuryPrognosis"] +
+                        updated_datetime_cols
+                    )
+                )
+
+                # Copy dataframe and updated the original in the function
+                scaler = Scaler(df1)
+                scaler.minmax(['PrognosisEndDateYear'])
+
+                # Scale any remaining original numerical columns not handled by
+                # previous stages, e.g. Special Columns.
+                scaler.minmax(labels2['numerical'])
+                df = scaler.df.copy()
         return df
 
     def extract_months(self, value: str | float | int):
@@ -293,6 +439,8 @@ class DataPreprocessor:
         numerical_cols = data_frame.select_dtypes(
             include=[np.number]
         ).columns
+
+        # print(f"Numerical columns: {numerical_cols}")
 
         dt_cols = [
             col for col in data_frame.columns
@@ -368,6 +516,7 @@ class DataPreprocessor:
 
         df_cols = self.get_labels(self.df)
         nums = df_cols['numerical'].tolist()
+        # dates = df_cols['datetime'].tolist()
         categories = df_cols['categorical'].tolist()
 
         self.df.columns = nums + categories
