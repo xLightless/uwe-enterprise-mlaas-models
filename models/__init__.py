@@ -12,6 +12,10 @@ from .preprocessing.imputing import Imputer
 
 from .types.standard.linear_regression import LinearRegression
 from .types.standard.knn import KNN
+from .types.experimental.mars.mars import MARS
+from .types.experimental.mars.mars_gpu import MARSGPU
+
+from .selection.grid_search import GridSearch
 
 from .config import (
     TARGET_VARIABLE_COL_NUM,
@@ -47,5 +51,8 @@ __all__ = [
     "datetime_cols",
     "LinearRegression",
     "KNN",
-    "arguments"
+    "arguments",
+    "MARS",
+    "MARSGPU",
+    "GridSearch"
 ]

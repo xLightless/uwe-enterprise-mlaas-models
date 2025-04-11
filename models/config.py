@@ -11,7 +11,7 @@ TARGET_VARIABLE_COL_NUM = 0
 
 # Model params
 RANDOM_STATE = 42
-TESTING_DATA_SIZE = 0.4
+TESTING_DATA_SIZE = 0.2
 
 # Terminal arguments and dataset paths
 current_directory = os.path.dirname(

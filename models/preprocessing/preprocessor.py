@@ -80,6 +80,13 @@ class DataPreprocessor:
     linear/tabular data in the form of numerical, datetime, and
     categorical data.
 
+    Note: Passing the target variable into the constructor will drop
+    the data frame column. If you want keep access to it then pass the
+    variable directly into the Data Frame.
+
+    Optionally, you can create the target variable before passing
+    the Data Frame.
+
     """
 
     def __init__(
