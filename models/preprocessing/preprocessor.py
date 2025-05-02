@@ -86,7 +86,6 @@ class DataPreprocessor:
 
     Optionally, you can create the target variable before passing
     the Data Frame.
-
     """
 
     def __init__(

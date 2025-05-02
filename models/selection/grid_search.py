@@ -59,75 +59,6 @@ class GridSearch:
 
         return avg_mse, avg_r2
 
-    # def grid_search(
-    #     self,
-    #     model_class,
-    #     fit_function,
-    #     X_train,
-    #     y_train,
-    #     X_test,
-    #     y_test,
-    #     param_grid,
-    #     n_jobs=-1
-    # ):
-    #     """
-    #     Perform a grid search over the specified hyperparameters by
-    #     splitting the data into chunks and training models in parallel.
-    #     The best model is selected based on the average MSE and R^2
-    #     """
-    #     keys, values = zip(*param_grid.items())
-    #     param_combinations = [
-    #         dict(zip(keys, v))
-    #         for v in itertools.product(*values)
-    #     ]
-
-    #     n_chunks = n_jobs
-    #     data_chunks = self.split_data(X_train, y_train, n_chunks)
-    #     print(f"Data chunks {len(data_chunks)}: ", [
-    #         len(chunk) for chunk in data_chunks
-    #     ])
-
-    #     best_params = None
-    #     avg_best_r2 = float('-inf')
-    #     avg_best_mse = float('inf')
-    #     best_ensemble = None
-    #     grid_searches = []
-    #     best_i = 0
-
-    #     print(f"Combinations: {len(param_combinations)}")
-    #     for i, params in enumerate(param_combinations):
-    #         models = Parallel(n_jobs=n_jobs)(
-    #             delayed(fit_function)(model_class, X_chunk, y_chunk, **params)
-    #             for X_chunk, y_chunk in data_chunks
-    #         )
-
-    #         models = [model for model in models if model is not None]
-    #         if not models:
-    #             print(f"No valid models for parameters: {params}. Skipping.")
-    #             continue
-
-    #         avg_mse, avg_r2 = self.evaluate_ensemble(models, X_test, y_test)
-
-    #         grid_searches.append({
-    #             'params': params,
-    #             'mse': avg_mse,
-    #             'r2': avg_r2
-    #         })
-
-    #         if avg_r2 > avg_best_r2 and avg_mse < avg_best_mse:
-    #             avg_best_r2 = avg_r2
-    #             avg_best_mse = avg_mse
-    #             best_params = params
-    #             best_ensemble = models
-    #             best_i = i
-
-    #     print(
-    #         f"\n[{best_i}] Best Params: {best_params}" +
-    #         f"\nEnsemble Averages: \nMSE: {avg_best_mse}\nR^2: {avg_best_r2}"
-    #     )
-
-    #     return best_ensemble, cp.array(grid_searches)
-
     def grid_search(
         self,
         model_class,
@@ -264,3 +195,28 @@ class GridSearch:
         ss_tot = ((y_true - y_true.mean()) ** 2 * weights).sum()
         r2 = 1 - ss_res / ss_tot
         return r2
+
+    def permutation_importance(self, model, X, y, metric):
+        """
+        Custom permutation importance function for MARS models.
+
+        Parameters:
+        model (MARS): Trained MARS model.
+        X (np.ndarray): Feature matrix.
+        y (np.ndarray): Target vector.
+        metric (function): The metric used to evaluate the performance.
+
+        Returns:
+        list: List of tuples (feature_index, importance_score).
+        """
+        baseline_score = metric(y, model.predict(X))
+
+        importances = []
+        for col in range(X.shape[1]):
+            X_permuted = X.copy()
+            cp.random.shuffle(X_permuted[:, col])
+            permuted_score = metric(y, model.predict(X_permuted))
+            importance = baseline_score - permuted_score
+            importances.append((col, importance))
+
+        return sorted(importances, key=lambda x: x[1], reverse=True)
