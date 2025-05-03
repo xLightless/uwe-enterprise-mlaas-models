@@ -35,6 +35,7 @@ from models import (
     LinearRegression,
     KNN,
     arguments,
+    CatBoost
 )
 
 
@@ -81,6 +82,34 @@ def train_model(
         case "knn":
             model = KNN()
             print(model_selected % "K-Nearest Neighbours")
+        case "catboost":
+            model = CatBoost(
+                iterations=2000,
+                learning_rate=0.02,
+                depth=6,
+                l2_leaf_reg=2,
+                loss_function='RMSE',
+                eval_metric='R2',
+                early_stopping_rounds=100,
+                bootstrap_type='Bayesian',
+                use_best_model=True,
+                subsample=0.85,
+                colsample_bylevel=0.8,
+                auto_feature_selection=False,
+                feature_selection_method='mutual_info',
+                feature_fraction=0.8,
+                handle_outliers=True,
+                outlier_method='clip',
+                use_cv=True,
+                cv_folds=5,
+                optimise_hyperparams=True,
+                n_iterations=30,
+                use_lr_schedule=True,
+                save_path=f"cat_model.pkl",
+                random_state=42,
+                verbose=100
+            )
+            print(model_selected % "CatBoost")
         case _:
             print("[ERROR] Model %s not found." % model_name)
             sys.exit()

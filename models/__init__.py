@@ -14,6 +14,7 @@ from .types.standard.linear_regression import LinearRegression
 from .types.standard.knn import KNN
 from .types.experimental.mars.mars import MARS
 from .types.experimental.mars.mars_gpu import MARSGPU
+from .types.experimental.catboost.catboost import CatBoost
 
 from .selection.grid_search import GridSearch
 
@@ -54,5 +55,6 @@ __all__ = [
     "arguments",
     "MARS",
     "MARSGPU",
-    "GridSearch"
+    "GridSearch",
+    "CatBoost",
 ]
