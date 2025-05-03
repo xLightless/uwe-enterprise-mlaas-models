@@ -1,0 +1,17 @@
+{
+    "AccidentType": 0.356953889131546,
+    "Accident Description": 0.11194658279418945,
+    "Injury Description": 0.1118832379579544,
+    "Dominant injury": 0.09551367163658142,
+    "Gender": 0.07694805413484573,
+    "Weather Conditions": 0.07347697764635086,
+    "Vehicle Type": 0.07220575213432312,
+    "GeneralRest": 0.009535130113363266,
+    "Severity_X_Costs": 0.00554883386939764,
+    "Total_Special_Costs": 0.005349442828446627,
+    "Injury_Severity": 0.004520581569522619,
+    "Injury_Severity_Numeric": 0.004520581569522619,
+    "Invalid_Date_Sequence": 0.004435119219124317,
+    "GeneralFixed": 0.0036703653167933226,
+    "Has_Income_Costs": 0.0031441329047083855
+}

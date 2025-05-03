@@ -1,0 +1,18 @@
+{
+    "MSE (original)": 351089.2488178332,
+    "RMSE (original)": 592.5278464492899,
+    "MAE (original)": 323.7612142454933,
+    "R\u00b2": 0.751062895401613,
+    "gender_stat_parity_diff": 0.06753063201904297,
+    "gender_disparate_impact": 0.9903428554534912,
+    "gender_Female_mean_prediction": 6.9928154945373535,
+    "gender_Female_count": 329,
+    "gender_Female_mean_error": 0.24929985130289173,
+    "gender_Male_mean_prediction": 6.957071304321289,
+    "gender_Male_count": 340,
+    "gender_Male_mean_error": 0.2311491312316486,
+    "gender_Other_mean_prediction": 6.9252848625183105,
+    "gender_Other_count": 310,
+    "gender_Other_mean_error": 0.2345016955732793,
+    "overall_fairness": 0.932469367980957
+}

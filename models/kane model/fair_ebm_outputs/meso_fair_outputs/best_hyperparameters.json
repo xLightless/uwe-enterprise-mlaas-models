@@ -1,0 +1,11 @@
+{
+    "hyper_hidden_units": [
+        128,
+        64,
+        32
+    ],
+    "learning_rate": 0.018898272259148596,
+    "batch_size": 64,
+    "epochs": 150,
+    "fairness_weight": 0.30000000000000004
+}
