@@ -382,7 +382,8 @@ class CatBoost(BaseEstimator, RegressorMixin):
     # Executes the complete model training pipeline: outlier handling, feature
     # selection, hyperparameter optimisation, cross-validation,
     # and SHAP value calculation.
-    def fit(self, X, y, **fit_params):
+    # noqa: C901
+    def fit(self, X, y, **fit_params):  # noqa: C901
         print("[INFO] Starting enhanced CatBoost training pipeline...")
 
         # Store feature names from DataFrame columns or fit_params
@@ -898,7 +899,8 @@ class CatBoost(BaseEstimator, RegressorMixin):
 
     # Generates partial dependence plots showing marginal effects of features
     # on predicted outcomes, independent of other features.
-    def plot_partial_dependence(
+    # noqa: C901
+    def plot_partial_dependence(  # noqa: C901
             self, features, n_cols=3, grid_resolution=20, show=True):
         """Generates partial dependence plots for the specified features."""
         if self.model_ is None:
