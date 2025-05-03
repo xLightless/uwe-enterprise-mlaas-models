@@ -32,9 +32,10 @@ from models import (
     invalid_cols,
     medical_protected_cols,
     datetime_cols,
+    arguments,
     LinearRegression,
     KNN,
-    arguments,
+    MARS,
     CatBoost
 )
 
@@ -82,6 +83,9 @@ def train_model(
         case "knn":
             model = KNN()
             print(model_selected % "K-Nearest Neighbours")
+        case "mars":
+            model = MARS()
+            print(model_selected % "MARS")
         case "catboost":
             model = CatBoost(
                 iterations=2000,
