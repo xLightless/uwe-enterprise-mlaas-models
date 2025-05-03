@@ -16,9 +16,11 @@ import sys
 import time
 import subprocess
 import pandas as pd
+import pickle
 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from models.types.experimental.catboost import CatBoost
 
 from models import (
     DataPreprocessor,
@@ -34,6 +36,7 @@ from models import (
     datetime_cols,
     LinearRegression,
     KNN,
+    CatBoost,
     arguments,
 )
 
@@ -81,12 +84,49 @@ def train_model(
         case "knn":
             model = KNN()
             print(model_selected % "K-Nearest Neighbours")
+        case "cat":
+            feature_names = None
+
+            if hasattr(X_train, 'columns'):
+                feature_names = X_train.columns.tolist()
+
+            model = CatBoost(
+                iterations=2000,
+                learning_rate=0.02,
+                depth=6,
+                l2_leaf_reg=2,
+                loss_function='RMSE',
+                eval_metric='R2',
+                early_stopping_rounds=100,
+                bootstrap_type='Bayesian',
+                use_best_model=True,
+                subsample=0.85,
+                colsample_bylevel=0.8,
+                auto_feature_selection=False,
+                feature_selection_method='mutual_info',
+                feature_fraction=0.8,
+                handle_outliers=True,
+                outlier_method='clip',
+                use_cv=True,
+                cv_folds=5,
+                optimise_hyperparams=True,
+                n_iterations=30,
+                use_lr_schedule=True,
+                save_path=f"cat_model.pkl",
+                random_state=42,
+                verbose=100
+            )
+            print(model_selected % "CatBoost")
         case _:
             print("[ERROR] Model %s not found." % model_name)
             sys.exit()
 
     # Fit the model to the training data
-    model.fit(X_train, y_train)
+    if model_name == "cat" and feature_names is not None:
+        model.feature_names_ = feature_names
+        model.fit(X_train, y_train)
+    else:
+        model.fit(X_train, y_train)
     return model
 
 
@@ -94,6 +134,7 @@ def evaluate_model(model_name, model, X_test, y_test, verbose):
     """
     Public function for testing a trained model.
     """
+    import math
 
     # Make predictions on the test data
     predictions = model.predict(X_test)
@@ -103,9 +144,9 @@ def evaluate_model(model_name, model, X_test, y_test, verbose):
         print("[INFO] Mean Absolute Error:", mean_absolute_error(
             y_test, predictions
         ))
-        print("[INFO] Mean Squared Error:", mean_squared_error(
-            y_test, predictions
-        ))
+        mse = mean_squared_error(y_test, predictions)
+        print("[INFO] Mean Squared Error:", mse)
+        print("[INFO] Root Mean Squared Error (RMSE):", math.sqrt(mse))
         print("[INFO] R2 Score:", r2_score(
             y_test, predictions
         ))
@@ -212,57 +253,106 @@ def run_models(args, processor: DataPreprocessor):
     """
     Run the select model in args for training or testing.
     """
+    # --- Define model filename based on args.model ---
+    model_filename = f"{args.model}_model.pkl" if args.model else None
 
     if (args.model is None and args.o) and not args.install:
         print("[ERROR] No model specified. Please use --model <model_name>.")
         return None
 
-    # Executes the training portion of the model on the split dataset.
-    if args.train and not args.test:
+    # --- Prepare data split (needed for both train and test) ---
+    # Ensure processor.df is not empty and has enough columns
+    if processor.df is None or processor.df.empty or processor.df.shape[1] <= 1:
+        print("[ERROR] Preprocessed DataFrame is invalid or empty. Cannot proceed.")
+        return None
+    if not (0 <= TARGET_VARIABLE_COL_NUM < processor.df.shape[1]):
+         print(f"[ERROR] TARGET_VARIABLE_COL_NUM ({TARGET_VARIABLE_COL_NUM}) is out of bounds for the DataFrame shape {processor.df.shape}. Cannot proceed.")
+         return None
+
+    try:
         y = processor.df.iloc[:, TARGET_VARIABLE_COL_NUM].values  # Target variable
         X = processor.df.iloc[:, 1:].values  # Features
-
-        # Split the data into training and testing sets
-        # (60% training, 40% testing)
         X_train, X_test, y_train, y_test = train_test_split(
             X,
             y,
             test_size=TESTING_DATA_SIZE,
             random_state=args.seed,
         )
+    except Exception as e:
+        print(f"[ERROR] Failed during data splitting: {e}")
+        return None
+    # --- End data split ---
 
+    model = None
+
+    # Executes the training portion of the model on the split dataset.
+    if args.train and not args.test:
         print("[INFO] Training model...")
         start_time = time.time()
-        model = train_model(
-            args.model,
-            X_train,
-            y_train,
-            X_test,
-            y_test
-        )
+        try:
+            if not isinstance(X_train, pd.DataFrame) and hasattr(processor, 'df'):
+                feature_cols = processor.df.columns.tolist()
+                feature_cols.pop(TARGET_VARIABLE_COL_NUM)
+                X_train_df = pd.DataFrame(X_train, columns=feature_cols)
+                X_test_df = pd.DataFrame(X_test, columns=feature_cols)
+                model = train_model(args.model, X_train_df, y_train, X_test_df, y_test)
+            else:
+                model = train_model(args.model, X_train, y_train, X_test, y_test)
+        except Exception as e_train:
+            print(f"[ERROR] Model training failed: {e_train}")
+            model = None
+
         end_time = time.time()
-        print("[INFO] Training complete. Took %f seconds." % (
-            end_time - start_time
-        ))
+        if model:
+             print("[INFO] Training process complete. Took %f seconds." % (
+                 end_time - start_time
+             ))
+
 
     elif args.test and not args.train:
-        if (os.path.exists(datasets_raw_directory)):
-            print("Evaluating %s model..." % args.model)
-            evaluate_model(
-                args.model,
-                model,
-                X_test,
-                y_test,
-                args.verbose
-            )
+        # --- Load model and evaluate ---
+        if model_filename and os.path.exists(model_filename):
+            print(f"[INFO] Loading model from {model_filename} for evaluation...")
+            try:
+                with open(model_filename, 'rb') as f:
+                    model = pickle.load(f)
+                print("[INFO] Model loaded successfully.")
+
+                # --- Now evaluate the loaded model ---
+                print("Evaluating %s model..." % args.model)
+                evaluate_model(
+                    args.model,
+                    model,
+                    X_test,
+                    y_test,
+                    args.verbose
+                )
+
+            except ModuleNotFoundError as e_mod:
+                 print(f"[ERROR] Failed to load model: Class definition not found. Ensure the model class ({e_mod.name}) is available in the environment.")
+                 import traceback
+                 traceback.print_exc()
+            except EOFError:
+                 print(f"[ERROR] Failed to load model: File {model_filename} might be corrupted or incomplete.")
+            except Exception as e_load_eval:
+                print(f"[ERROR] Failed to load or evaluate model: {e_load_eval}")
+                import traceback
+                traceback.print_exc()
+        elif not model_filename:
+             print("[ERROR] Cannot test: No model specified via --model.")
+        else:
+            print(f"[ERROR] Model file {model_filename} not found. Train the model first using --train.")
+        # --- End Load and Evaluate ---
+
 
     elif not args.train and not args.test:
         print(
             "[ERROR] No action specified. Please use --train or --test."
         )
-    else:
+    else: # Handles args.train and args.test being true
         print(
-            "[ERROR] You cannot perform training and testing simultaneously."
+            "[ERROR] You cannot perform training and testing simultaneously in separate steps." +
+            " Training automatically saves the model. Use --test separately."
         )
 
 # flake8: noqa: C901
