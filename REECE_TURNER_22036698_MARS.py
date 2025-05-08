@@ -300,7 +300,7 @@ else:
 
 
 # Save the best ensemble model to the same location as this .py file
-model_path = os.path.join(os.path.dirname(__file__), "mars_ensemble_model_2.pkl")
+model_path = os.path.join(os.path.dirname(__file__), "mars_ensemble_model.pkl")
 with open(model_path, "wb") as file:
     pickle.dump(best_ensemble, file)
 
