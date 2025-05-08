@@ -3,25 +3,25 @@ Multivariate Adaptive Regression Splines (MARS).
 
 Written by Reece Turner, 22036698.
 """
-import itertools
-import sys
-import time
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
+# flake8: noqa
+
 from joblib import Parallel, delayed
-from sklearn.metrics import mean_squared_error
-from sklearn.model_selection import train_test_split
 
-import lime
-import lime.lime_tabular
+import sys
+import pandas as pd
+import numpy as np
+import itertools
+import time
+import pickle
+import os
+
+from sklearn.model_selection import train_test_split
 
 from models import (
     DataPreprocessor,
     RANDOM_STATE,
     TESTING_DATA_SIZE,
-    insurance_dataset,
     gdpr_protected_cols,
     invalid_cols,
     medical_protected_cols,
@@ -29,44 +29,50 @@ from models import (
     MARS
 )
 
-# Update to the correct path location of this project.
-PATH_TO_PROJECT = (
-    "C:/Program Development/UWE Bristol/Year 3/Enterprise AI Project/"
+# PATH_TO_UWE_ENTERPRISE_MLAAS_MODELS = "/project/backend/services/machinelearning/uwe_enterprise_mlaas_models"
+# sys.path.append(PATH_TO_UWE_ENTERPRISE_MLAAS_MODELS)
+relative_path = os.path.join(
+    os.path.dirname(__file__),
+    "datasets",
+    "raw",
+    "insurance.csv"
 )
 
-# Load the dataset
-PATH_TO_UWE_ENTERPRISE_MLAAS_MODELS = (
-    PATH_TO_PROJECT +
-    "project/backend/services/machinelearning/uwe_enterprise_mlaas_models")
+# Construct the full path
+insurance_dataset = os.path.abspath(relative_path)
 
-sys.path.append(PATH_TO_UWE_ENTERPRISE_MLAAS_MODELS)
+# Load the dataset
 data = pd.read_csv(insurance_dataset)
 
-# Data Preprocessing
 protected_cols = (
     gdpr_protected_cols + medical_protected_cols + datetime_cols + invalid_cols
 )
 
 TARGET_VARIABLE = "SettlementValue"
+
+# target_variable_col = data[TARGET_VARIABLE]
+
 processor = DataPreprocessor(
     df=data,
+    # target_variable=TARGET_VARIABLE,
     protected_cols=protected_cols
 )
 
-if TARGET_VARIABLE not in processor.df.columns:
-    print(f"Error: Target variable '{TARGET_VARIABLE}' " +
-          "does not exist in the dataset.")
-    sys.exit(1)
-
+# processor.df[TARGET_VARIABLE] = target_variable_col
 target = processor.df[TARGET_VARIABLE].copy()
 
-if target.isnull().sum() > 0:
-    print("Error: Target variable has null values.")
+if (target.isnull().sum() > 0):
+    print("Target variable has null values")
     sys.exit(1)
 
-# Split the data into training and testing sets
+print(target)
+
 df = processor.df.copy()
-df = df.iloc[: 1500]
+
+df = df.iloc[: 5000]  # Reduce the dataset size for time complexity
+print("Data Frame Shape: ", df.shape)
+
+# Split the data into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(
     df.drop(columns=[TARGET_VARIABLE]),
     df[TARGET_VARIABLE],
@@ -75,7 +81,11 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 
-# Check the data for missing values
+print("X_train Shape: ", X_train.shape)
+print("y_train Shape: ", y_train.shape)
+print("X_test Shape: ", X_test.shape)
+print("y_test Shape: ", y_test.shape)
+
 def check_missing_values(X, y):
     """
     Checks for NaN or infinite values in X and y.
@@ -97,17 +107,12 @@ def check_missing_values(X, y):
         return True
     return False
 
-
-# Check for a malformed dataset, continue if not.
-MISSING_VALUES = check_missing_values(X_train, y_train) or \
-    check_missing_values(X_test, y_test)
-
-if MISSING_VALUES:
+missing_values = check_missing_values(X_train, y_train) or check_missing_values(X_test, y_test)
+if missing_values:
     print("Missing values detected in the dataset.")
     sys.exit(1)
 
 
-# Chunk the data for parallel processing
 def split_data(X, y, n_chunks):
     """
     Split the data into chunks (processors) for parallel processing.
@@ -119,8 +124,8 @@ def split_data(X, y, n_chunks):
     return [(
             X[i * chunk_size:(i + 1) * chunk_size],
             y[i * chunk_size:(i + 1) * chunk_size]
-            ) for i in range(n_chunks)]
-
+            ) for i in range(n_chunks)
+    ]
 
 def predict(models, X):
     """
@@ -132,7 +137,6 @@ def predict(models, X):
     """
     chunked_predictions = np.array([model.predict(X) for model in models])
     return np.mean(chunked_predictions, axis=0)
-
 
 def weighted_mse(y_true, y_pred, weights):
     """
@@ -149,7 +153,6 @@ def weighted_mse(y_true, y_pred, weights):
     squared_errors = (y_true - y_pred) ** 2
     weighted_mse = np.sum(weights * squared_errors) / np.sum(weights)
     return weighted_mse
-
 
 def weighted_r2(y_true, y_pred, weights):
     """
@@ -168,7 +171,6 @@ def weighted_r2(y_true, y_pred, weights):
     r2 = 1 - ss_res / ss_tot
     return r2
 
-
 def evaluate_ensemble(models, X_test, y_test, weights):
     """
     Evaluate the ensemble of models using weighted MSE and weighted R^2.
@@ -178,17 +180,7 @@ def evaluate_ensemble(models, X_test, y_test, weights):
     r2 = weighted_r2(y_test, preds, weights)
     return mse, r2
 
-
-def grid_search(
-    model_class: MARS,
-    fit_function,
-    X_train,
-    y_train,
-    X_test,
-    y_test,
-    param_grid,
-    n_jobs=-1
-):
+def grid_search(model_class: MARS, fit_function, X_train, y_train, X_test, y_test, param_grid, n_jobs=-1):
     """
     Custom grid search with parallel processing for hyperparameter tuning.
 
@@ -261,7 +253,6 @@ def grid_search(
     )
     return best_ensemble, np.array(grid_searches)
 
-
 param_grid = {
     'max_terms': [100],
     'max_degree': [3],
@@ -269,19 +260,7 @@ param_grid = {
     'penalty': [0.1]
 }
 
-
-def fit_mars_model(
-    model_class: MARS,
-    X,
-    y,
-    max_terms,
-    max_degree,
-    min_samples_split,
-    penalty
-):
-    """
-    Fit a MARS model with the given parameters.
-    """
+def fit_mars_model(model_class: MARS, X, y, max_terms, max_degree, min_samples_split, penalty):
     X = np.atleast_2d(X)
     y = np.ravel(y)
     model = model_class(
@@ -293,16 +272,12 @@ def fit_mars_model(
 
     try:
         model.fit(X, y)
-        print("Fitted model with params: " +
-              f"{max_terms}, {max_degree}, {min_samples_split}, {penalty}")
+        print(f"Fitted model with params: {max_terms}, {max_degree}, {min_samples_split}, {penalty}")
     except Exception as e:
-        print("Error fitting model with params: " +
-              f"{max_terms}, {max_degree}, {min_samples_split}, {penalty}. " +
-              f"Error: {e}")
+        print(f"Error fitting model with params: {max_terms}, {max_degree}, {min_samples_split}, {penalty}. Error: {e}")
         return None
 
     return model
-
 
 if max(param_grid['max_terms']) <= df.shape[0]:
     start_time = time.time()
@@ -324,73 +299,18 @@ else:
     sys.exit()
 
 
-# Evaluate the best ensemble
-def permutation_importance(model, X, y, metric):
-    """
-    Custom permutation importance function for MARS models.
+# Save the best ensemble model to the same location as this .py file
+model_path = os.path.join(os.path.dirname(__file__), "mars_ensemble_model_2.pkl")
+with open(model_path, "wb") as file:
+    pickle.dump(best_ensemble, file)
 
-    Parameters:
-    model (MARS): Trained MARS model.
-    X (np.ndarray): Feature matrix.
-    y (np.ndarray): Target vector.
-    metric (function): The metric used to evaluate the performance.
+    # Show where it is saved
+    print(f"Model saved to {os.path.abspath(file.name)}")
 
-    Returns:
-    list: List of tuples (feature_index, importance_score).
-    """
-    baseline_score = metric(y, model.predict(X))
+# with open(model_path, "rb") as file:
+#     loaded_model = pickle.load(file)
 
-    importances = []
-    for col in range(X.shape[1]):
-        X_permuted = X.copy()
-        np.random.shuffle(X_permuted[:, col])
-        permuted_score = metric(y, model.predict(X_permuted))
-        importance = baseline_score - permuted_score
-        importances.append((col, importance))
+#     predictions = [model.predict(X_test.values) for model in loaded_model]
+#     aggregated_predictions = np.mean(predictions, axis=0)
+#     print("Predictions: ", aggregated_predictions)
 
-    return sorted(importances, key=lambda x: x[1], reverse=True)
-
-
-feature_names = X_test.columns
-importance = permutation_importance(
-    best_ensemble[0],
-    X_test.values,
-    y_test.values,
-    mean_squared_error
-)
-
-# Replace feature indices with feature names
-importance = [(feature_names[idx], score) for idx, score in importance]
-
-
-def graph_features():
-    """
-    Graph the feature importances.
-    """
-    explainer = lime.lime_tabular.LimeTabularExplainer(
-        training_data=X_test.values,
-        feature_names=X_test.columns.tolist(),
-        mode='regression',
-        verbose=True
-    )
-
-    exp = explainer.explain_instance(
-        data_row=X_test.values[0],
-        predict_fn=best_ensemble[0].predict,
-        num_features=30,
-        top_labels=1,
-        model_regressor=None,
-    )
-
-    explanation = exp.as_list()
-    features, contributions = zip(*explanation)
-
-    plt.figure(figsize=(8, 6))
-    plt.barh(range(len(features)), contributions, color='mediumseagreen')
-    plt.yticks(range(len(features)), features)
-    plt.xlabel('Contribution to Prediction')
-    plt.title('LIME Explanation for Feature Importance ')
-    plt.gca().invert_yaxis()
-    plt.grid(True, linestyle='--', alpha=0.6)
-    plt.tight_layout()
-    plt.show()
